@@ -1,0 +1,129 @@
+name: ML workflow CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - "**"
+
+jobs:
+  style-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: fsds-mle-assignment
+          environment-file: env.yml
+          auto-activate-base: false
+
+      - name: Run style checks
+        shell: bash -l {0}
+        run: |
+          conda activate fsds-mle-assignment
+          isort --check-only .
+          black --check .
+          flake8 .
+
+  unit-and-functional-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: fsds-mle-assignment
+          environment-file: env.yml
+          auto-activate-base: false
+
+      - name: Install package in editable mode
+        shell: bash -l {0}
+        run: |
+          conda activate fsds-mle-assignment
+          python -m pip install -e .[dev]
+
+      - name: Run pytest
+        shell: bash -l {0}
+        run: |
+          conda activate fsds-mle-assignment
+          pytest
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: fsds-mle-assignment
+          environment-file: env.yml
+          auto-activate-base: false
+
+      - name: Install tree
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes tree
+
+      - name: Show directory tree before build
+        shell: bash -l {0}
+        run: |
+          conda activate fsds-mle-assignment
+          tree -L 3 .
+
+      - name: Build the package
+        shell: bash -l {0}
+        run: |
+          conda activate fsds-mle-assignment
+          python -m build
+
+      - name: Show directory tree after build
+        shell: bash -l {0}
+        run: |
+          conda activate fsds-mle-assignment
+          tree -L 3 .
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-artifacts
+          path: |
+            dist/**
+            env.yml
+
+  install:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: package-artifacts
+          path: artifacts
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: fsds-mle-assignment
+          environment-file: artifacts/env.yml
+          auto-activate-base: false
+
+      - name: Install and run workflow scripts
+        shell: bash -l {0}
+        run: |
+          conda activate fsds-mle-assignment
+          python -m pip install artifacts/dist/*.whl
+          python scripts/ingest_data.py --output-dir ./ci-data --log-level INFO
+          python scripts/train.py --dataset-dir ./ci-data --output-dir ./ci-models --log-level INFO
+          python scripts/score.py --model-dir ./ci-models --dataset-dir ./ci-data --output-dir ./ci-scores --log-level INFO
