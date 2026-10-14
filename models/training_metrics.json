@@ -1,0 +1,4 @@
+{
+  "model_path": "models/model.joblib",
+  "train_accuracy": 0.98
+}

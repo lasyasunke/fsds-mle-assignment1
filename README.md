@@ -9,12 +9,14 @@ and provides command-line scripts, tests, logging, and a GitHub Actions workflow
 ```text
 .
 ├── .github/workflows/ci.yml       # Style, test, build, and install workflow
-├── scripts/                       # Command-line workflow entrypoints
+├── main.py                        # End-to-end ML pipeline orchestration with MLflow
+├── scripts/                       # Standalone workflow entrypoints for each stage
 ├── src/fsds_mle_assignment/       # Installable Python package
 ├── tests/                         # Unit and package import tests
 ├── env.yml                        # Conda environment used by CI
 ├── pyproject.toml                 # Package metadata and build configuration
-└── setup.cfg                      # Flake8 and pytest configuration
+├── setup.cfg                      # Flake8 and pytest configuration
+└── README.md                      # Project documentation
 ```
 
 ## Workflow overview
@@ -24,6 +26,10 @@ The workflow has three stages:
 1. **Ingest:** generate a reproducible synthetic binary-classification dataset.
 2. **Train:** fit and save a preprocessing-plus-classifier pipeline.
 3. **Score:** evaluate the saved model against the validation CSV and save metrics.
+
+The repository also includes a master entry point, [main.py](main.py), which wraps
+those stages in a parent MLflow run and records each stage as a nested child run.
+This is the recommended way to execute the full workflow in CI and local runs.
 
 The output folders are created automatically when they do not already exist.
 
@@ -106,13 +112,16 @@ python -m pytest -q
 
 ### Run the complete workflow
 
-Run each script from the project root, in order:
+The simplest way to run the full ML pipeline is through the top-level orchestration
+script:
 
 ```powershell
-python scripts/ingest_data.py --output-dir .\data
-python scripts/train.py --dataset-dir .\data --output-dir .\models
-python scripts/score.py --model-dir .\models --dataset-dir .\data --output-dir .\scores
+python main.py --data-dir .\data --model-dir .\models --score-dir .\scores --log-level INFO
 ```
+
+This command creates the output folders, generates the synthetic dataset,
+trains the model, evaluates it on the validation split, and records the full
+workflow under a parent MLflow run with nested child runs for each stage.
 
 The workflow creates:
 
@@ -127,7 +136,43 @@ scores/
 └── scores.json
 ```
 
-### Script options
+### Master workflow options
+
+The orchestration script accepts the following options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--data-dir PATH` | `./data` | Directory where the train/validation CSV files are written |
+| `--model-dir PATH` | `./models` | Directory where the trained model and metrics are saved |
+| `--score-dir PATH` | `./scores` | Directory where scoring output is written |
+| `--train-size N` | `800` | Number of training rows to generate |
+| `--validation-size N` | `200` | Number of validation rows to generate |
+| `--random-state N` | `42` | Reproducibility seed for dataset generation and model training |
+| `--experiment-name NAME` | `FSDS_MLE_Assignment` | MLflow experiment name used for the parent run |
+| `--log-level LEVEL` | `INFO` | Logging threshold, for example `DEBUG`, `INFO`, or `WARNING` |
+
+For example, to run the full pipeline with a custom experiment and storage locations:
+
+```powershell
+python main.py `
+  --data-dir .\data `
+  --model-dir .\models `
+  --score-dir .\scores `
+  --train-size 1000 `
+  --validation-size 250 `
+  --random-state 7 `
+  --experiment-name fsds_mle_demo `
+  --log-level DEBUG
+```
+### Launching MLFlow UI
+Run this command from the project root:
+
+```powershell
+python -m mlflow ui
+```
+Navigate to http://127.0.0.1:5000 to inspect the nested run hierarchy, parameters, and logged metrics.
+
+### Standalone script options
 
 Each script accepts `--log-level`, `--log-path`, and `--no-console-log`:
 
