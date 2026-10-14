@@ -99,31 +99,57 @@ jobs:
             dist/**
             env.yml
 
+  # install:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Check out code
+  #       uses: actions/checkout@v4
+
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: package-artifacts
+  #         path: artifacts
+
+  #     - name: Set up Miniconda
+  #       uses: conda-incubator/setup-miniconda@v3
+  #       with:
+  #         activate-environment: fsds-mle-assignment
+  #         environment-file: artifacts/env.yml
+  #         auto-activate-base: false
+
+  #     - name: Install and run workflow scripts
+  #       shell: bash -l {0}
+  #       run: |
+  #         conda activate fsds-mle-assignment
+  #         python -m pip install artifacts/dist/*.whl
+  #         python scripts/ingest_data.py --output-dir ./ci-data --log-level INFO
+  #         python scripts/train.py --dataset-dir ./ci-data --output-dir ./ci-models --log-level INFO
+  #         python scripts/score.py --model-dir ./ci-models --dataset-dir ./ci-data --output-dir ./ci-scores --log-level INFO
   install:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+      needs: build
+      runs-on: ubuntu-latest
+      steps:
+        - name: Check out code
+          uses: actions/checkout@v4
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: package-artifacts
-          path: artifacts
+        - name: Download build artifacts
+          uses: actions/download-artifact@v4
+          with:
+            name: package-artifacts
+            path: artifacts
 
-      - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: fsds-mle-assignment
-          environment-file: artifacts/env.yml
-          auto-activate-base: false
+        - name: Set up Miniconda
+          uses: conda-incubator/setup-miniconda@v3
+          with:
+            activate-environment: fsds-mle-assignment
+            environment-file: artifacts/env.yml
+            auto-activate-base: false
 
-      - name: Install and run workflow scripts
-        shell: bash -l {0}
-        run: |
-          conda activate fsds-mle-assignment
-          python -m pip install artifacts/dist/*.whl
-          python scripts/ingest_data.py --output-dir ./ci-data --log-level INFO
-          python scripts/train.py --dataset-dir ./ci-data --output-dir ./ci-models --log-level INFO
-          python scripts/score.py --model-dir ./ci-models --dataset-dir ./ci-data --output-dir ./ci-scores --log-level INFO
+        - name: Install package and run master MLflow pipeline
+          shell: bash -l {0}
+          run: |
+            conda activate fsds-mle-assignment
+            python -m pip install artifacts/dist/*.whl
+            python main.py --data-dir ./ci-data --model-dir ./ci-models --score-dir ./ci-scores --log-level INFO

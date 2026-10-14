@@ -2,6 +2,8 @@ import argparse
 import logging
 from pathlib import Path
 
+import mlflow
+
 from fsds_mle_assignment.data_ingestion import generate_dataset
 from fsds_mle_assignment.logging_utils import configure_root_logger
 
@@ -37,6 +39,38 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def run_ingest(
+    output_dir: Path, train_size: int, validation_size: int, random_state: int
+) -> tuple[Path, Path]:
+    # Log parameters
+    mlflow.log_params(
+        {
+            "output_dir": str(output_dir),
+            "train_size": train_size,
+            "validation_size": validation_size,
+            "random_state": random_state,
+        }
+    )
+
+    train_path, validation_path = generate_dataset(
+        output_dir,
+        train_size=train_size,
+        validation_size=validation_size,
+        random_state=random_state,
+    )
+
+    # Log metrics
+    mlflow.log_metrics(
+        {
+            "train_samples": train_size,
+            "validation_samples": validation_size,
+            "total_samples": train_size + validation_size,
+        }
+    )
+
+    return train_path, validation_path
+
+
 def main() -> None:
     args = build_parser().parse_args()
     configure_root_logger(
@@ -45,12 +79,21 @@ def main() -> None:
     logger = logging.getLogger(__name__)
 
     logger.info("Starting the data ingestion workflow.")
-    train_path, validation_path = generate_dataset(
-        args.output_dir,
-        train_size=args.train_size,
-        validation_size=args.validation_size,
-        random_state=args.random_state,
-    )
+
+    # If executed directly as standalone, manage MLflow run lifecycle
+    if mlflow.active_run() is None:
+        with mlflow.start_run(run_name="data_ingestion"):
+            train_path, validation_path = run_ingest(
+                args.output_dir,
+                args.train_size,
+                args.validation_size,
+                args.random_state,
+            )
+    else:
+        train_path, validation_path = run_ingest(
+            args.output_dir, args.train_size, args.validation_size, args.random_state
+        )
+
     logger.info(
         "Ingestion complete. Training data: %s; validation data: %s",
         train_path,

@@ -2,6 +2,8 @@ import argparse
 import logging
 from pathlib import Path
 
+import mlflow
+
 from fsds_mle_assignment.logging_utils import configure_root_logger
 from fsds_mle_assignment.scoring import score_model
 
@@ -40,6 +42,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def run_score(model_dir: Path, dataset_dir: Path, output_dir: Path) -> dict:
+    mlflow.log_params(
+        {
+            "model_dir": str(model_dir),
+            "dataset_dir": str(dataset_dir),
+            "output_dir": str(output_dir),
+        }
+    )
+
+    metrics = score_model(model_dir, dataset_dir, output_dir)
+
+    if isinstance(metrics, dict):
+        for metric_name, val in metrics.items():
+            if isinstance(val, (int, float)):
+                mlflow.log_metric(f"val_{metric_name}", float(val))
+
+    return metrics
+
+
 def main() -> None:
     args = build_parser().parse_args()
     configure_root_logger(
@@ -48,7 +69,13 @@ def main() -> None:
     logger = logging.getLogger(__name__)
 
     logger.info("Starting the scoring workflow.")
-    metrics = score_model(args.model_dir, args.dataset_dir, args.output_dir)
+
+    if mlflow.active_run() is None:
+        with mlflow.start_run(run_name="model_scoring"):
+            metrics = run_score(args.model_dir, args.dataset_dir, args.output_dir)
+    else:
+        metrics = run_score(args.model_dir, args.dataset_dir, args.output_dir)
+
     logger.info("Scoring workflow completed successfully. %s", metrics)
 
 
